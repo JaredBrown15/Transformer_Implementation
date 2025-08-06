@@ -5,36 +5,39 @@ from tornado.gen import Return
 
 
 class ActivationFunction:
-    def forward(self, input):
+    def forward(self, x):
         raise NotImplementedError("Activation function must be implemented in subclass")
 
-    def derivative(self, input):
-        raise NotImplementedError("Activation function must be implemented in subclass")
+    def derivative(self, dA, x):
+        raise NotImplementedError("Activation function must be implemented in subclass") \
 
+    def step(self, learning_rate, gradients):
+        return
 
 
 class ReLU(ActivationFunction):
-    def forward(self, input):
-        return np.maximum(0, input)
+    def forward(self, x):
+        return np.maximum(0, x)
 
-    def derivative(self, input):
-        return np.sign(input)   # 0 if input=0, 1 if input>0
-
+    def derivative(self, dA, x):
+        # dA = dL = dX in the case of the output layer
+        return np.sign(dA)   # 0 if x=0, 1 if x>0
+        # returns dZ
 
 
 class Sigmoid(ActivationFunction):
-    def forward(self, input):
-        return 1 / (1 + np.exp(-input))
+    def forward(self, x):
+        return 1 / (1 + np.exp(-x))
 
-    def derivative(self, input):
-        return input * (1 - input)
+    def derivative(self, dA, x):
+        return dA * (1 - dA)
 
 
 
 class Softmax(ActivationFunction):
-    def forward(self, input):
-        return np.exp(input) / np.sum(np.exp(input), axis=0)
+    def forward(x):
+        return np.exp(x) / np.sum(np.exp(x), axis=0)
 
-    def derivative(self, input):
-        # TODO: Make Return
+    def derivative(self, softmax_output, target_labels):
+        return softmax_output - target_labels
         # return
