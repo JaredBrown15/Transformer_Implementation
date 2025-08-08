@@ -16,13 +16,13 @@ class ActivationFunction:
 
 
 class ReLU(ActivationFunction):
-    def forward(self, x):
+    def forward(self, x, bias):
         return np.maximum(0, x)
 
     def derivative(self, dA, x):
         # dA = dL = dX in the case of the output layer
-        return np.sign(dA)   # 0 if x=0, 1 if x>0
-        # returns dZ
+        grad = np.where(x <= 0, 0, 1)
+        return dA * grad        # returns dZ
 
 
 class Sigmoid(ActivationFunction):
@@ -30,14 +30,20 @@ class Sigmoid(ActivationFunction):
         return 1 / (1 + np.exp(-x))
 
     def derivative(self, dA, x):
-        return dA * (1 - dA)
+        s = self.forward(x)  # or pass sigmoid output explicitly
+        return dA * s * (1 - s)
 
 
 
 class Softmax(ActivationFunction):
+    @staticmethod
     def forward(x):
-        return np.exp(x) / np.sum(np.exp(x), axis=0)
+        # subtract max per column (batch)
+        shift_x = x - np.max(x, axis=0, keepdims=True)
+        exp_x = np.exp(shift_x)
+        return exp_x / np.sum(exp_x, axis=0, keepdims=True)
 
-    def derivative(self, softmax_output, target_labels):
+    @staticmethod
+    def derivative(softmax_output, target_labels):
         return softmax_output - target_labels
         # return

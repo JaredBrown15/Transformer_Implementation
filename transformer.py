@@ -60,7 +60,7 @@ class TransformerDecoder:
         self.attention = attention
         self.residual_connection = residual_connection
         self.d_model = d_model
-        self.num_head = num_heads
+        self.num_heads = num_heads
 
 
 class FullyConnectedNetwork:
@@ -79,30 +79,38 @@ class FullyConnectedNetwork:
             self.activation = activation_class()
         except AttributeError:
             raise ValueError(f"No such activation function: {activation}")
-        self.layer_neuron_vals = [None] * (num_layers + 1)
-        self.layer_gradients = [None] * (num_layers + 1)
+        self.layer_neuron_vals = [None] * (num_layers*3 + 2)
+        self.layer_gradients = [None] * (num_layers*3 + 1)
         self.num_layers = num_layers
         self.d_hidden = d_hidden
         self.dropout = dropout
         self.layers=[]
-        for i in range(num_layers - 1):
-            self.layers.append(copy.deepcopy(FullyConnectedLayer(d_in, d_hidden, self.dropout, bias)))
-            self.layers.append(self.activation())
         self.layers.append(copy.deepcopy(FullyConnectedLayer(d_in, d_hidden, self.dropout, bias)))
+        self.layers.append(self.activation)
+        for i in range(num_layers-1):
+            self.layers.append(copy.deepcopy(FullyConnectedLayer(d_hidden, d_hidden, self.dropout, bias)))
+            self.layers.append(self.activation)
+            if(dropout > 0):
+                self.layers.append(DropoutLayer(self.dropout))
+        self.layers.append(copy.deepcopy(FullyConnectedLayer(d_hidden, d_out, self.dropout, bias)))
 
     def forward(self, x, isTraining):
         for index, layer in enumerate(self.layers):
             if isTraining:
                 self.layer_neuron_vals[index] = x
-            x = layer.forward(x)
+            x = layer.forward(x, isTraining)
+        if isTraining:
+            self.layer_neuron_vals[len(self.layer_neuron_vals)-1] = x
         return x
 
     def backward(self, grad):
-        for index, layer in enumerate(reversed(self.layers)):
+        for index, layer in reversed(list(enumerate(self.layers))):
+        # for index, layer in enumerate(reversed(self.layers)):
             x = self.layer_neuron_vals[index]
             grad = layer.derivative(grad, x)
             self.layer_gradients[index] = grad
-            grad = grad[0]  # This will be dX=dA from fully connected layer or dZ from activation layer
+            if len(grad) == 3:
+                grad = grad[0]  # This will be dX=dA from fully connected layer or dZ from activation layer
         return
 
     def step(self, learning_rate):
@@ -113,7 +121,7 @@ class FullyConnectedNetwork:
 
     def predict(self, x):
         output = self.forward(x, False)
-        predictions = af.Softmax(x)
+        predictions = af.Softmax.forward(output)
         return predictions
 
 class FullyConnectedLayer:
@@ -131,24 +139,39 @@ class FullyConnectedLayer:
         if bias:
             self.b = np.full((hidden_size, 1), 0.01)
 
-    def forward(self, x):
+    def forward(self, x, is_training):
         return np.dot(self.w, x) + self.b
 
 
     def derivative(self, dZ, x):
         dW = np.dot(dZ, x.T)
-        dB = dZ
+        dB = np.sum(dZ, axis=1, keepdims=True)
         dX = np.dot(self.w.T, dZ)
         return [dX, dW, dB]
 
     def step(self, learning_rate, gradients):
-        self.w += learning_rate * gradients
-        self.b += learning_rate * gradients.sum(axis=0)
+        self.w -= learning_rate * gradients[1]
+        self.b -= learning_rate * gradients[2]
         return
 
 
+class DropoutLayer:
+    def __init__(self, rate):
+        self.rate = rate
+        self.mask = None
 
+    def forward(self, input, training):
+        if training:
+            self.mask = (np.random.rand(*input.shape) > self.rate).astype(float)
+            return (input * self.mask) / (1 - self.rate)
+        else:
+            return input  # no dropout in inference
 
+    def derivative(self, dZ, input):
+        return (dZ * self.mask) / (1 - self.rate)
+
+    def step(self, learning_rate, gradients):
+        return
 
 
 
