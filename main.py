@@ -45,16 +45,17 @@ def main():
 
     # denseNetwork = transformer.FullyConnectedNetwork()
     denseNetwork = transformer.FullyConnectedNetwork(
-        num_layers = 2,
-        d_hidden = 32,
+        num_layers = 4,
+        d_hidden = 64,
         d_in = 4,
         d_out = 3,
-        dropout = 0.1,
+        dropout = 0.15,
         activation = 'ReLU',
         bias = True)
 
-    iters = 1000
+    iters = 5000
     for i in range(iters):
+        # NOTE: X should be [batch_size x input_dim (num_features)]
         train(X_train.T, y_train, denseNetwork)
 
     predictions_test = denseNetwork.predict(X_test.T)

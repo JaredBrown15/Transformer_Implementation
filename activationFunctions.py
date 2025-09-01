@@ -14,7 +14,7 @@ class ActivationFunction:
     def step(self, learning_rate, gradients):
         return
 
-
+# x is dimension [batch_size x input_dim]
 class ReLU(ActivationFunction):
     def forward(self, x, bias):
         return np.maximum(0, x)

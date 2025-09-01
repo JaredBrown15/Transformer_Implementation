@@ -6,8 +6,9 @@ import numpy as np
 # import activationFunctions as af
 import activationFunctions as af
 import copy
-
+import math
 from activationFunctions import Softmax
+import torch.nn.functional as F
 
 
 class Transformer:
@@ -84,15 +85,16 @@ class FullyConnectedNetwork:
         self.num_layers = num_layers
         self.d_hidden = d_hidden
         self.dropout = dropout
+        self.bias = bias
         self.layers=[]
-        self.layers.append(copy.deepcopy(FullyConnectedLayer(d_in, d_hidden, self.dropout, bias)))
+        self.layers.append(copy.deepcopy(LinearLayer(d_in, d_hidden, self.dropout, bias)))
         self.layers.append(self.activation)
         for i in range(num_layers-1):
-            self.layers.append(copy.deepcopy(FullyConnectedLayer(d_hidden, d_hidden, self.dropout, bias)))
+            self.layers.append(copy.deepcopy(LinearLayer(d_hidden, d_hidden, self.dropout, bias)))
             self.layers.append(self.activation)
             if(dropout > 0):
                 self.layers.append(DropoutLayer(self.dropout))
-        self.layers.append(copy.deepcopy(FullyConnectedLayer(d_hidden, d_out, self.dropout, bias)))
+        self.layers.append(copy.deepcopy(LinearLayer(d_hidden, d_out, self.dropout, bias)))
 
     def forward(self, x, isTraining):
         for index, layer in enumerate(self.layers):
@@ -124,34 +126,49 @@ class FullyConnectedNetwork:
         predictions = af.Softmax.forward(output)
         return predictions
 
-class FullyConnectedLayer:
+class LinearLayer:
+    """Fully connected linear layer
+
+    Args:
+        input_dim (int): Dimension of input to layer ()
+        hidden_size (int): The width of the rectangle.
+
+    Returns:
+        float: The area of the rectangle.
+
+    Raises:
+        ValueError: If `length` or `width` is negative.
+    """
     def __init__(self,
-                 # activation,
                  input_dim: int=4,
-                 # output_dim: int=128,
                  hidden_size: int=32,
                  dropout: float=0.1,
                  bias: bool=True
                  ):
         self.dropout = dropout
-        # self.activation = activation
-        self.w = np.random.randn(hidden_size, input_dim) * np.sqrt(2 / input_dim)
-        if bias:
+        self.bias = bias
+        self.w = np.random.randn(hidden_size, input_dim) * np.sqrt(2 / input_dim)   #Kaiming/He initialization
+        if self.bias:
             self.b = np.full((hidden_size, 1), 0.01)
+        else:
+            self.b = np.full((hidden_size, 1), 0)
 
     def forward(self, x, is_training):
-        return np.dot(self.w, x) + self.b
-
+            # x is dimensions [input_dim  x batch_size]
+            # w is dimensions [hidden_size x input_dim]
+            return np.dot(self.w, x) + self.b
 
     def derivative(self, dZ, x):
-        dW = np.dot(dZ, x.T)
-        dB = np.sum(dZ, axis=1, keepdims=True)
+        batch_size = x.shape[0]             # Assumes x is size [input_dim x batch_size]
+        dW = np.dot(dZ, x.T) / batch_size   # dZ dimensions [hidden_size x input_dim]
+        dB = np.sum(dZ, axis=1, keepdims=True) / batch_size
         dX = np.dot(self.w.T, dZ)
         return [dX, dW, dB]
 
     def step(self, learning_rate, gradients):
         self.w -= learning_rate * gradients[1]
-        self.b -= learning_rate * gradients[2]
+        if self.bias:
+            self.b -= learning_rate * gradients[2]
         return
 
 
@@ -174,9 +191,55 @@ class DropoutLayer:
         return
 
 
+class MultiHeadAttentionLayer:
+    def __init__(
+            self,
+            d_model,
+            num_heads,
+            dropout=0.0,
+            bias = True):
+        assert d_model % num_heads == 0, "model dimension must be divisible by number of heads"
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.bias = bias
+        self.d_head = self.d_model // self.num_heads
 
+        self.w_q = LinearLayer(d_model, d_model, self.dropout, bias)
+        self.w_k = LinearLayer(d_model, d_model, self.dropout, bias)
+        self.w_v = LinearLayer(d_model, d_model, self.dropout, bias)
+        self.w_output = LinearLayer(d_model, d_model, self.dropout, bias)
+        self.scale_value = float(1.0 / math.sqrt(self.dk))
 
+    def forward(self, x, is_training):
+        # x is dimensions [batch_size x sequence_len x d_model]
+        batch_size = x.shape[0]
+        seq_len = x.shape[1]
 
+        # Linear Projections - dimensions [batch_size x sequence_len x d_model]
+        q = self.w_q.forward(x, True)
+        k = self.w_k.forward(x, True)
+        v = self.w_v.forward(x, True)
+
+        # Reshape projections to add a dimension, allowing for multiple heads
+        q = q.reshape(batch_size, seq_len, self.num_heads, self.d_model)
+        k = k.reshape(batch_size, seq_len, self.num_heads, self.d_model)
+        v = v.reshape(batch_size, seq_len, self.num_heads, self.d_model)
+
+        # Transpose to get correct order of dimensions (necessary for matmul operation when calculating attention scores)
+        # [batch_size, num_heads, seq_len, d_head]
+        q = q.transpose(1, 2)       # This swaps dimensions 1 and 2
+        k = k.transpose(1, 2) 
+        v = v.transpose(0, 2, 1, 3) # Another way of doing it...
+
+        # Results in [batch_size, num_heads, seq_len, d_head]
+        attention_scores = np.matmul(q, k.transpose(0, 1, 3, 2)) * self.scale_value
+        attention_weights = F.softmax(attention_scores, axis=-1)    # Must apply just to final dimension... Using pytorch softmax here b/c easier
+
+        context = context.transpose(0, 2, 1, 3)  # [batch, seq_len, heads, d_head]
+        context = context.reshape(batch_size, seq_len, self.d_model)
+
+        
 
 
 
