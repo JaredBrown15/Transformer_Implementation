@@ -36,7 +36,7 @@ def train(x, y, network):
     output = network.forward(x, True)
     predictions = activationFunctions.Softmax.forward(output)
     losses.append(lossFunctions.CrossEntropy.computeLoss(y.T, predictions.T))
-    dA = activationFunctions.Softmax.derivative(predictions, y)
+    dA = activationFunctions.Softmax.backward(predictions, y)
     network.backward(dA)
     network.step(learning_rate)
 

@@ -8,7 +8,7 @@ class ActivationFunction:
     def forward(self, x):
         raise NotImplementedError("Activation function must be implemented in subclass")
 
-    def derivative(self, dA, x):
+    def backward(self, dA, x):
         raise NotImplementedError("Activation function must be implemented in subclass") \
 
     def step(self, learning_rate, gradients):
@@ -19,7 +19,7 @@ class ReLU(ActivationFunction):
     def forward(self, x, bias):
         return np.maximum(0, x)
 
-    def derivative(self, dA, x):
+    def backward(self, dA, x):
         # dA = dL = dX in the case of the output layer
         grad = np.where(x <= 0, 0, 1)
         return dA * grad        # returns dZ
@@ -29,7 +29,7 @@ class Sigmoid(ActivationFunction):
     def forward(self, x):
         return 1 / (1 + np.exp(-x))
 
-    def derivative(self, dA, x):
+    def backward(self, dA, x):
         s = self.forward(x)  # or pass sigmoid output explicitly
         return dA * s * (1 - s)
 
@@ -44,6 +44,6 @@ class Softmax(ActivationFunction):
         return exp_x / np.sum(exp_x, axis=0, keepdims=True)
 
     @staticmethod
-    def derivative(softmax_output, target_labels):
+    def backward(softmax_output, target_labels):
         return softmax_output - target_labels
         # return
