@@ -36,16 +36,42 @@ class TransformerEncoder:
     def __init__(
             self,
             num_layers: int=6,
-            attention: bool=True,
             residual_connection: bool=True,
             d_model: int=512,
-            num_heads: int = 8
+            d_ff: int = 2048,
+            num_heads: int=8,
+            bias: bool=True,
+            dropout: float = 0.1
     ):
-        self.num_layers = num_layers
-        self.attention = attention
         self.residual_connection = residual_connection
         self.d_model = d_model
         self.num_heads = num_heads
+
+        self.layer_neuron_vals = [None] * (num_layers*3 + 2)
+        self.layer_gradients = [None] * (num_layers*3 + 1)
+        self.num_layers = num_layers
+
+        self.layers=[]
+        for i in range(num_layers):
+            self.layers.append(copy.deepcopy(MultiHeadAttentionLayer(d_model, num_heads, dropout, bias)))
+            self.layers.append(copy.deepcopy(DropoutLayer(dropout)))
+            # LayerNorm Goes here
+            self.layers.append(copy.deepcopy(LinearLayer(d_model, d_ff, dropout, bias)))
+            self.activation = af.ReLU()
+            self.layers.append(copy.deepcopy(LinearLayer(d_ff, d_model, dropout)))
+            self.layers.append(copy.deepcopy(DropoutLayer(dropout)))
+
+            # LayerNorm Goes here
+
+    def forward(self, x, isTraining):
+        for index, layer in enumerate(self.layers):
+            if isTraining:
+                self.layer_neuron_vals[index] = x
+            x = layer.forward(x, isTraining)
+        if isTraining:
+            self.layer_neuron_vals[len(self.layer_neuron_vals)-1] = x
+        return x 
+        
 
 
 class TransformerDecoder:
@@ -190,6 +216,54 @@ class DropoutLayer:
     def step(self, learning_rate, gradients):
         return
 
+class LayerNorm:
+    # y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+    def __init__(
+            self,
+            normalized_shape = 512,
+            gamma=None, 
+            beta=None, 
+            eps=1e-5
+            
+    ):
+        self.normalized_shape = normalized_shape
+        self.gamma = gamma
+        self.beta = beta
+        self.eps = eps    
+    
+    def forward(self, x, normalized_shape):
+        if gamma is None:
+            gamma = np.ones(normalized_shape, dtype=x.dtype)
+        if beta is None:
+            beta = np.zeros(normalized_shape, dtype=x.dtype)
+        
+        # Creates range of axes over which to normalize. Tuple b/c np.mean and np.var require tuples
+        toNorm = tuple(range(x.ndim - len(normalized_shape), x.ndim))
+        
+        # Mean and variance along normalized axes
+        mean = np.mean(x, axis=toNorm, keepdims=True)
+        var = np.var(x, axis=toNorm, keepdims=True)
+        
+        # Normalize
+        x_hat = (x - mean) / np.sqrt(var + self.eps)
+        
+        # Apply gamma and beta with broadcasting
+        y = gamma * x_hat + beta
+        return y
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 class MultiHeadAttentionLayer:
     def __init__(
@@ -317,13 +391,6 @@ class MultiHeadAttentionLayer:
         }
 
         return dX
-
-
-
-
-
-
-
 
 
 

@@ -41,7 +41,7 @@ def train(x, y, network):
     network.step(learning_rate)
 
 
-def main():
+def testFFN():
 
     # denseNetwork = transformer.FullyConnectedNetwork()
     denseNetwork = transformer.FullyConnectedNetwork(
@@ -82,4 +82,9 @@ def main():
     plt.show()
 
 
+
+
+
+def main():
+    pass
 main()
